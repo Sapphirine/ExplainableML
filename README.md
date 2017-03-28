@@ -1,4 +1,4 @@
-# d6-xai
+# D6: Explainable ML: Visual Analytics of Interactive Machine Learning
 EECS6895 Project
 
 It requires the following python packages:
