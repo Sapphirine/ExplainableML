@@ -1,0 +1,835 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css">
+<link href="css/material-icons.css" rel="stylesheet">
+<link href="css/spin.css" rel="stylesheet">
+
+<script type="text/front-matter">
+Visual Analytics of Interactive Machine Learning Demo
+</script>
+
+<script src="assets/d3.min.js"></script>
+<script src="assets/tsne.js"></script>
+<script src="assets/demo-configs.js"></script>
+<script src="assets/visualize.js"></script>
+<script src="assets/figures.js"></script>
+<script src="node_modules/highcharts/highcharts.js"></script>
+<script src="node_modules/highcharts/highcharts-more.js"></script>
+<script src="node_modules/highcharts/modules/heatmap.js"></script>
+<script src="node_modules/highcharts/modules/solid-gauge.js"></script>
+<script src="node_modules/highcharts/modules/exporting.js"></script>
+<script src="//code.jquery.com/jquery-1.12.4.js"></script>
+<script src="//code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<style>
+body {
+	margin-left: 10%;
+	margin-right: 10%;
+}
+
+/* Resets */
+
+input[type=range] {
+  -webkit-appearance: none; /* Hides the slider so that custom slider can be made */
+  width: 100%; /* Specific width is required for Firefox. */
+  background: transparent; /* Otherwise white in Chrome */
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+}
+
+input[type=range]:focus {
+  outline: none; /* Removes the blue border. You should probably do some kind of focus styling for accessibility reasons though. */
+}
+
+input[type=range]::-ms-track {
+  width: 100%;
+  cursor: pointer;
+
+  /* Hides the slider so custom styles can be added */
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+
+/* Thumb */
+
+/* Special styling for WebKit/Blink */
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: steelblue;
+  cursor: pointer;
+  margin-top: -6px; /* You need to specify a margin in Chrome, but in Firefox and IE it is automatic */
+}
+
+/* All the same stuff for Firefox */
+input[type=range]::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: steelblue;
+  cursor: pointer;
+  border: none;
+}
+
+/* All the same stuff for IE */
+input[type=range]::-ms-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: grey;
+  cursor: pointer;
+}
+
+/* Track */
+
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 3px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+  border: none;
+}
+
+input[type=range]:focus::-webkit-slider-runnable-track {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+input[type=range]::-moz-range-track {
+  width: 100%;
+  height: 3px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+  border: none;
+}
+
+input[type=range]::-ms-track {
+  width: 100%;
+  height: 3px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+  border: none;
+}
+input[type=range]::-ms-fill-lower {
+  background: rgba(0, 0, 0, 0.1);
+}
+input[type=range]:focus::-ms-fill-lower {
+  background: rgba(0, 0, 0, 0.1);
+}
+input[type=range]::-ms-fill-upper {
+  background: rgba(0, 0, 0, 0.1);
+}
+input[type=range]:focus::-ms-fill-upper {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+</style>
+<script>
+	function showChart(index) {
+		var chartMenuDiv = d3.select("#charts");
+		chartMenuDiv.selectAll(".demo")
+			.classed("selected", false)
+			.filter(function(d,i) { return i === index })
+			.classed("selected", true)
+		chartMenuDiv.selectAll(".chart-container")
+			.style("display", "none")
+			.filter(function(d,i) { return i === index })
+			.style("display", "block");
+	}
+</script>
+</head><body>
+<dt-article>
+  <h1 class="l-middle" style="text-align: center">D6: Visual Analytics of Interactive Machine Learning Demo</h1>
+  <div class="l-page">
+    <dt-include src="assets/playground.html"><style>
+  #playground {
+    overflow: hidden;
+    font-family: 'Open Sans', sans-serif;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    /*border-bottom: 1px solid rgba(0, 0, 0, 0.1);*/
+    margin-top: 36px;
+    padding: 36px 0 0 0;
+    /*background: #fcfcfc;*/
+    z-index: 1000;
+  }
+
+  #playground * {
+    box-sizing: border-box;
+  }
+
+  #playground.modal {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    top: 50px;
+  }
+
+  /* Playground Canvas */
+  #playground-canvas {
+    float: left;
+    width: 55%;
+  }
+
+  #playground-canvas canvas {
+    width: 100%;
+  }
+
+  /* Data Menu */
+  #data-menu {
+    /*float: left;*/
+    /*width: 25%*/
+    width: 250px;
+    float: left;
+    margin-bottom: 24px;
+    overflow: hidden;
+    margin-left: 0px;
+  }
+  #data-menu .demo-data {
+    cursor: pointer;
+    position: relative;
+    font-size: 10px;
+    line-height: 1.2em;
+    box-sizing: border-box;
+    float: left;
+    margin: 2px;
+    padding: 4px;
+    width: calc(33% - 4px);
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.08);
+  }
+  @media(min-width: 480px) {
+    #data-menu .demo-data {
+      width: calc(25% - 8px);
+      padding: 8px;
+      margin: 4px;
+    }
+  }
+  @media(min-width: 768px) {
+    #data-menu .demo-data {
+      width: calc(50% - 8px);
+      padding: 8px;
+      margin: 4px;
+    }
+  }
+  #data-menu .demo-data:hover {
+	border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+  #data-menu .demo-data.selected::after {
+    content: "";
+    border: 2px solid rgba(70, 130, 180, 0.8);
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    border-radius: 4px;
+  }
+  #data-menu .demo-data span {
+    display: block;
+  }
+  #data-menu .demo-data:hover canvas {
+    opacity: 1;
+  }
+  #data-menu .demo-data canvas {
+    width: 100%;
+    opacity: 0.3;
+  }
+  #data-menu .demo-data.selected canvas {
+    opacity: 1;
+  }
+
+  /* Data Details */
+  #data-details {
+    position: relative;
+	float: left;
+  }
+
+  /* Chart Details */
+  #chart-details {
+	position: relative;
+	float: left;
+	width: 500px;
+	margin-top: 0px;
+	margin-left: 50px;
+  }
+  
+  @media(min-width: 768px) {
+    #data-details {
+      width: 200px;
+      float: left;
+    }
+  }
+
+  #data-details #data-controls {
+    width: 200px;
+    float: left;
+    position: relative;
+    overflow: hidden;
+    font-size: 13px;
+  }
+
+  @media(min-width: 768px) {
+    #data-details #data-controls {
+      width: 90%;
+      margin-right: 10%;
+      float: left;
+    }
+  }
+
+  #data-details #play-controls {
+    margin-bottom: 18px;
+    overflow: hidden;
+    position: relative;
+  }
+  #data-details #play-controls button {
+    cursor: pointer;
+    outline: none;
+    border-radius: 50%;
+    background: steelblue;
+    color: white;
+    width: 25%;
+    margin-right: 5%;
+    padding-top: 25%;
+    padding-bottom: 0;
+    border: none;
+    float: left;
+    position: relative;
+  }
+  #play-controls i {
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 36px;
+    font-size: 24px;
+    line-height: 0;
+  }
+  @media(min-width: 768px) {
+    #play-controls i {
+      font-size: 30px;
+    }
+  }
+  #play-controls #play-pause i {
+    display: none;
+    position: absolute;
+  }
+  #play-controls #play-pause.paused i:nth-child(1) {
+    display: block;
+  }
+  #play-controls #play-pause.playing i:nth-child(2) {
+    display: block;
+  }
+
+  #steps-display {
+    float: left;
+    text-align: center;
+    width: 25%;
+    line-height: 1.5em;
+    font-size: 13px;
+  }
+
+  @media(min-width: 1024px) {
+    #steps-display {
+      font-size: 16px;
+      line-height: 1.6em;
+    }
+  }
+  #data-details #data-description {
+    width: 50%;
+    margin-right: 10%;
+    float: right;
+    font-size: 14px;
+    line-height: 1.6em;
+  }
+
+  @media(min-width: 768px) {
+    #data-details #data-description {
+      width: 40%;
+      float: left;
+      margin-right: 0;
+    }
+  }
+
+  /* Options */
+  #data-details #options {
+    float: left;
+    padding-left: 36px;
+    font-size: 13px;
+    line-height: 1.5em;
+    width: 90%;
+  }
+  #data-details input {
+    display: block;
+    width: 90%;
+    margin: 8px 0 16px 0;
+  }
+
+  #data-options {
+    width: 0px;
+    margin-left: 12px;
+	float: left;
+  }
+  
+  #svm-options {
+    width: 200px;
+    margin-left: 12px;
+	float: left;
+  }
+ 
+  #data-details #share {
+    margin-top: 8px;
+    display: block;
+    color: rgba(0, 0, 0, 0.4);
+    text-decoration: none;
+    font-size: 12px;
+  }
+
+  #data-details #share:hover {
+    text-decoration: underline;
+  }
+
+  #data-details #share i {
+    line-height: 0px;
+    position: relative;
+    top: 7px;
+  }
+   
+  #charts {
+	background-color: transparent;
+	display: block;
+	width: 500px;
+  }
+  
+  #charts #chartDetails {
+	display: block;
+	width: 100%;
+	margin-top: 20px;
+	float: left;
+  }
+  
+  #charts .title {
+	font-family: 'Roboto', sans-serif;
+	line-height: 1.7;
+	width: 100%;
+  }
+  
+  #charts .demo {
+    cursor: pointer;
+    position: relative;
+    font-size: 10px;
+    line-height: 1.2em;
+    box-sizing: border-box;
+    float: left;
+    margin: 2px;
+    padding: 4px;
+    width: calc(33% - 4px);
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.08);
+  }
+
+  #charts .demo:hover {
+	border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+  
+  #charts .demo.selected::after {
+    content: "";
+    border: 2px solid rgba(70, 130, 180, 0.8);
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    border-radius: 4px;
+  }
+  
+  #charts .img-thumbnail {
+	display: inline-block;
+    vertical-align: middle;
+    width: 150px;
+    max-width: 150px;
+    max-height: 150px;
+    border-radius: 0;
+    padding: 0;
+    border: 0;
+    background: 0;
+    position: inherit!important;
+    border-bottom: 1px solid #EDEDED;
+  }
+  
+  #charts .chart-container {
+	width: 500px; 
+	height: 350px; 
+	margin: 0 auto; 
+	float: left;
+	display: none;
+  }
+  
+</style>
+<div id="playground">
+  <div id="playground-canvas">
+    <canvas id="output" width="600px" height="600px"></canvas>
+  </div>
+  <div style="width: 500px; float: left; margin-left: 50px;">
+	<div id="data-menu"></div>
+	<div id="data-details">
+		<div id="data-controls">
+		  <div id="data-options"></div>
+		  <div id="svm-options"></div>
+		</div>
+	</div>
+  </div>
+  <div style="width: 500px; float: left; margin-left: 50px;">
+	<button id="restart">
+		<i class="material-icons">play_arrow</i>
+    </button>
+  </div>
+  <div id="chart-details">
+	<div id="floatingCirclesG" style="display: none">
+		<div class="f_circleG" id="frotateG_01"></div>
+		<div class="f_circleG" id="frotateG_02"></div>
+		<div class="f_circleG" id="frotateG_03"></div>
+		<div class="f_circleG" id="frotateG_04"></div>
+		<div class="f_circleG" id="frotateG_05"></div>
+		<div class="f_circleG" id="frotateG_06"></div>
+		<div class="f_circleG" id="frotateG_07"></div>
+		<div class="f_circleG" id="frotateG_08"></div>
+	</div>
+	<div id="charts">
+		<div class="title">
+			<h5>Performance Measurement</h5>
+		</div>
+		<div class="demo selected" onclick="showChart(0)">
+			<img class="img-thumbnail" alt="Preicision/Recall/F1 Scores" src="css/img1.svg" />
+		</div>
+		<div class="demo" onclick="showChart(1)">
+			<img class="img-thumbnail" alt="Confustion Matrix" src="css/img2.svg" />
+		</div>
+		<div class="demo" onclick="showChart(2)">
+			<img class="img-thumbnail" alt="Preicision-Recall Curve" src="css/img3.svg" />
+		</div>
+		<div id="chartDetails">
+			<div class="chart-container" id="container1" style="display: block"></div>
+			<div class="chart-container" id="container2"></div>
+			<div class="chart-container" id="container3"></div>
+		</div>
+	</div>
+	
+  </div>
+
+</div>
+<script src="assets/playground.js"></script>
+</dt-include>
+</div>
+<script>
+(function() {
+    var precisionScoreData = [];
+    var recallScoreData = [];
+    var f1ScoreData = [];
+    var confusionData = [];
+	var curveData = [];
+    var scoreChart = null;
+    var confusionChart = null;
+	var curveChart = null;
+ 	
+	var scoreChartOptions = {
+		chart: {
+			type: 'bar',
+			width: 500,
+			height: 350
+		},
+		title: {
+			text: 'Precision/Recall/F1 Scores',
+			style: { fontSize: "12px" }
+		},
+		xAxis: {
+			categories: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
+			title: null
+		},
+		yAxis: {
+			min: 0,
+			max: 1.5,
+			title: {
+				text: 'Score',
+				align: 'high'
+			},
+			labels: {
+				overflow: 'justify'
+			}
+		},
+		plotOptions: {
+			bar: {
+				dataLabels: {
+					enabled: true
+				}
+			}
+		},
+		legend: {
+			layout: 'vertical',
+			align: 'right',
+			verticalAlign: 'bottom',
+			y: -50,
+			floating: true,
+			borderWidth: 1,
+			backgroundColor: ((Highcharts.theme && Highcharts.theme.legendBackgroundColor) || '#FFFFFF'),
+			shadow: true
+		},
+		credits: {
+			enabled: false
+		},
+		series: [{
+			name: 'Precision',
+		}, {
+			name: 'Recall',
+		}, {
+			name: 'f1',
+		}]
+	};
+	
+	var confusionChartOptions = {
+		chart: {
+			type: 'heatmap',
+			marginTop: 40,
+			marginBottom: 80,
+			marginLeft: 30,
+			plotBorderWidth: 1,
+			width: 500,
+			height: 350
+		},
+		title: {
+			text: 'Confusion Matrix',
+			style: { fontSize: "12px" }
+		},
+		xAxis: {
+			categories: ['0', '1', '2', '3', '4','5','6','7','8','9'],
+		},
+
+		yAxis: {
+			categories: ['0', '1', '2', '3', '4','5','6','7','8','9'],
+			title: null
+		},
+
+		colorAxis: {
+			min: 0,
+			minColor: '#E6F0FB',
+			maxColor: '#2080DF'
+		},
+
+		legend: {
+			align: 'bottom',
+			layout: 'horizontal',
+			margin: 0,
+			horizontalAlign: 'center',
+			x: 120,
+			symbolHeight: 10
+		},
+		tooltip: {
+			formatter: function () {
+				return '<b>' + this.point.value + '</b>';
+			}
+		},
+		credits: {
+			enabled: false
+		},
+		series: [{
+			name: 'confusion',
+			borderWidth: 0,
+			dataLabels: {
+				enabled: false,
+				color: '#000000'
+			}
+		}]
+	};
+	
+	var curveChartOptions = {
+		chart: {
+			type: 'spline',
+			inverted: false,
+			marginLeft: 50,
+			width: 500,
+			height: 350
+		},
+		title: {
+			text: 'Precision-Recall Curve',
+			style: { fontSize: "12px" }
+		},
+		xAxis: {
+			min: 0,
+			max: 1,
+			reversed: false,
+			title: {
+				enabled: true,
+				text: 'Recall'
+			},
+			lineWidth: 1
+		},
+		yAxis: {
+			min: 0,
+			max: 1,
+			reversed: false,
+			title: {
+				enabled: true,
+				text: 'Precision'
+			},
+			showLastLabel: false,
+			lineWidth: 1,
+			labels: {
+				rotation: 90,
+			}
+		},
+		legend: {
+			layout: 'vertical',
+			align: 'left',
+			verticalAlign: 'bottom',
+			x: 45,
+			y: -50,
+			floating: true,
+			borderWidth: 1,
+			backgroundColor: ((Highcharts.theme && Highcharts.theme.legendBackgroundColor) || '#FFFFFF'),
+			shadow: true
+		},
+		tooltip: {
+			headerFormat: '<b>{series.name}</b><br/>',
+			pointFormat: 'Precision: {point.y}, Recall: {point.x}'
+		},
+		plotOptions: {
+			spline: {
+				marker: {
+					enable: false
+				}
+			}
+		},
+		series: [{
+			name: 'Class 0',
+		}, {
+			name: 'Class 1',
+		}, {
+			name: 'Class 2',
+		}, {
+			name: 'Class 3',
+		}, {
+			name: 'Class 4',
+		}, {
+			name: 'Class 5',
+		}, {
+			name: 'Class 6',
+		}, {
+			name: 'Class 7',
+		}, {
+			name: 'Class 8',
+		}, {
+			name: 'Class 9',	
+		}]
+	};
+
+	function refreshChart() {
+		if (scoreChart !== null) {
+			scoreChart.destroy();
+		}        
+	    scoreChartOptions.series[0].data = precisionScoreData;
+	    scoreChartOptions.series[1].data = recallScoreData;
+	    scoreChartOptions.series[2].data = f1ScoreData;
+		scoreChart = new Highcharts.Chart('container1', scoreChartOptions);
+		
+		if (confusionChart != null) {
+			confusionChart.destroy();
+		}
+		confusionChartOptions.series[0].data = confusionData;
+		confusionChart = new Highcharts.chart('container2', confusionChartOptions);
+		if (curveChart != null) {
+			curveChart.destroy();
+		}
+		for (var i = 0; i < curveChartOptions.series.length; i ++) {
+			curveChartOptions.series[i].data = curveData[i];
+		}
+		curveChart = new Highcharts.Chart('container3', curveChartOptions);
+    }
+	
+	function constructConfusionData(origData) {
+		var newData = [];
+		for (var i = 0; i < origData.length; i ++) {
+			for (var j = 0; j < origData[i].length; j ++) {
+				newData.push([i, j, origData[i][j]])
+			}
+		}
+		return newData;
+	}
+	
+	function constructPrecisionRecallCurveData(precisionData, recallData) {
+		var newData = [];
+		for (var i = 0; i < precisionData.length; i ++) {
+			var classData = [];
+			for (var j = 0; j < precisionData[i].length; j++) {
+				classData.push([recallData[i][j], precisionData[i][j]]);
+			}
+			newData.push(classData);
+		}
+		return newData;
+	}
+	
+	function runSVM() {
+		d3.select("#floatingCirclesG").style("display", "block");
+		d3.select("#charts").style("display", "none");
+		GLOBALS.updateParameters();
+		var url;
+		if (GLOBALS.state.dataSet === "train") {
+			url = "http://localhost:5000/runsvm/train";
+		} else {
+			url = "http://localhost:5000/runsvm/test";
+		}
+		params = JSON.stringify({"kernel": GLOBALS.state.kernel, "gamma": "auto", "penalty": Number(GLOBALS.state.penalty), "degree": Number(GLOBALS.state.degree)});
+		var http = new XMLHttpRequest();
+		http.open("POST", url, true);
+		
+		http.setRequestHeader("Content-type", "application/json; charset=utf-8");
+		//http.setRequestHeader("Content-length", params.length);
+		//http.setRequestHeader("Connection", "close");
+
+		http.onreadystatechange = function() {
+			d3.select("#floatingCirclesG").style("display", "none");
+			d3.select("#charts").style("display", "block");
+			var jsonText = http.responseText;
+			var jsonObject = JSON.parse(jsonText);
+			GLOBALS.predict[GLOBALS.state.dataSet] = jsonObject["result"];
+			precisionScoreData = jsonObject["precision_score"];
+			recallScoreData = jsonObject["recall_score"];
+			f1ScoreData = jsonObject["f1_score"];
+			confusionData = constructConfusionData(jsonObject["confusion"]);
+			curveData = constructPrecisionRecallCurveData(jsonObject["precision_curve"], jsonObject["recall_curve"])
+			GLOBALS.runState();
+			refreshChart();
+			showChart(0);
+			console.log("receive response: " + jsonText.substr(0,100))
+		}
+		http.send(params);
+	}
+	document.getElementById('restart').onclick = runSVM;
+})()
+</script>
+
+</dt-article>
+
+<script type="text/bibliography">
+@article{maaten2008visualizing,
+  title={Visualizing data using t-SNE},
+  author={Maaten, Laurens van der and Hinton, Geoffrey},
+  journal={Journal of Machine Learning Research},
+  volume={9},
+  number={Nov},
+  pages={2579--2605},
+  year={2008},
+  url={http://www.jmlr.org/papers/volume9/vandermaaten08a/vandermaaten08a.pdf}
+}
+</script>
+</body></html>
