@@ -1,5 +1,5 @@
 <!DOCTYPE html><html><head><meta charset="utf-8">
-<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css">
+<link rel="stylesheet" href="css/jquery-ui.css">
 <link href="css/material-icons.css" rel="stylesheet">
 <link href="css/spin.css" rel="stylesheet">
 
@@ -8,6 +8,10 @@ Visual Analytics of Interactive Machine Learning Demo
 </script>
 
 <script src="assets/d3.min.js"></script>
+<script src="assets/three.js"></script>
+<script src="assets/tween.js"></script>
+<script src="assets/Detector.js"></script>
+<script src="assets/stats.min.js"></script>
 <script src="assets/tsne.js"></script>
 <script src="assets/demo-configs.js"></script>
 <script src="assets/visualize.js"></script>
@@ -17,9 +21,9 @@ Visual Analytics of Interactive Machine Learning Demo
 <script src="node_modules/highcharts/modules/heatmap.js"></script>
 <script src="node_modules/highcharts/modules/solid-gauge.js"></script>
 <script src="node_modules/highcharts/modules/exporting.js"></script>
-<script src="//code.jquery.com/jquery-1.12.4.js"></script>
-<script src="//code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
-<style>
+<script src="assets/jquery-1.12.4.js"></script>
+<script src="assets/jquery-ui.js"></script>
+<style> 
 body {
 	margin-left: 10%;
 	margin-right: 10%;
@@ -152,8 +156,8 @@ input[type=range]:focus::-ms-fill-upper {
     font-family: 'Open Sans', sans-serif;
     border-top: 1px solid rgba(0, 0, 0, 0.1);
     /*border-bottom: 1px solid rgba(0, 0, 0, 0.1);*/
-    margin-top: 36px;
-    padding: 36px 0 0 0;
+    margin-top: 16px;
+    padding: 0 0 0 0;
     /*background: #fcfcfc;*/
     z-index: 1000;
   }
@@ -172,13 +176,36 @@ input[type=range]:focus::-ms-fill-upper {
   /* Playground Canvas */
   #playground-canvas {
     float: left;
-    width: 55%;
+    width: 675px;
+	height: 675px;
   }
 
   #playground-canvas canvas {
+	position:relative; 
+	top:0px;
+	left: 0px;	
     width: 100%;
   }
-
+  
+  #playground-canvas #label-options {
+	position:relative;
+	float: right;
+	top:0px;
+	display: none;
+	margin-top: 2px;
+  }
+  
+  #playground-canvas #label-options label {
+	width: 90px;
+	padding-right:10px;
+  }
+  
+  #playground-canvas #label-options select {
+	width: 100px;
+	border: none;
+	border-bottom: solid 1px;
+  }
+  
   /* Data Menu */
   #data-menu {
     /*float: left;*/
@@ -384,7 +411,12 @@ input[type=range]:focus::-ms-fill-upper {
     margin-left: 12px;
 	float: left;
   }
- 
+  
+  #svm-options select {
+	border: none;
+	border-bottom: solid 1px;
+  }
+  
   #data-details #share {
     margin-top: 8px;
     display: block;
@@ -479,9 +511,11 @@ input[type=range]:focus::-ms-fill-upper {
 </style>
 <div id="playground">
   <div id="playground-canvas">
-    <canvas id="output" width="600px" height="600px"></canvas>
+	<div id="label-options"></div>
+    <canvas id="output" width="0px" height="0px">
+	</canvas>
   </div>
-  <div style="width: 500px; float: left; margin-left: 50px;">
+  <div style="width: 500px; float: left; margin-left: 50px; margin-top: 20px">
 	<div id="data-menu"></div>
 	<div id="data-details">
 		<div id="data-controls">
@@ -511,13 +545,13 @@ input[type=range]:focus::-ms-fill-upper {
 			<h5>Performance Measurement</h5>
 		</div>
 		<div class="demo selected" onclick="showChart(0)">
-			<img class="img-thumbnail" alt="Preicision/Recall/F1 Scores" src="css/img1.svg" />
+			<img class="img-thumbnail" alt="Preicision-Recall Curve" src="css/img0.svg" />
 		</div>
 		<div class="demo" onclick="showChart(1)">
-			<img class="img-thumbnail" alt="Confustion Matrix" src="css/img2.svg" />
+			<img class="img-thumbnail" alt="Preicision/Recall/F1 Scores" src="css/img1.svg" />
 		</div>
 		<div class="demo" onclick="showChart(2)">
-			<img class="img-thumbnail" alt="Preicision-Recall Curve" src="css/img3.svg" />
+			<img class="img-thumbnail" alt="Confustion Matrix" src="css/img2.svg" />
 		</div>
 		<div id="chartDetails">
 			<div class="chart-container" id="container1" style="display: block"></div>
@@ -542,7 +576,582 @@ input[type=range]:focus::-ms-fill-upper {
     var scoreChart = null;
     var confusionChart = null;
 	var curveChart = null;
- 	
+	var width = 675;
+	var height = 675;
+	
+ 	if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+	var container, stats;
+	var camera, scene, renderer, particles, geometry, materials = [], parameters, i, h, color, sprite, size;
+	var mouseX = 0, mouseY = 0;
+	var windowHalfX = width / 2;
+	var windowHalfY = height / 2;
+	var dataPoints = [];
+	//var renderMaterial = null;
+	//var spriteMaterial = null;
+	var spritesPerRow = 0;
+	var spritesPerColumn = 0;
+	var spriteImage = null;
+	var MIN_POINT_SIZE = 5.0;
+	var FRAGMENT_SHADER_POINT_TEST_CHUNK = "\n  bool point_in_unit_circle(vec2 spriteCoord) {\n    vec2 centerToP = spriteCoord - vec2(0.5, 0.5);\n    return dot(centerToP, centerToP) < (0.5 * 0.5);\n  }\n\n  bool point_in_unit_equilateral_triangle(vec2 spriteCoord) {\n    vec3 v0 = vec3(0, 1, 0);\n    vec3 v1 = vec3(0.5, 0, 0);\n    vec3 v2 = vec3(1, 1, 0);\n    vec3 p = vec3(spriteCoord, 0);\n    float p_in_v0_v1 = cross(v1 - v0, p - v0).z;\n    float p_in_v1_v2 = cross(v2 - v1, p - v1).z;\n    return (p_in_v0_v1 > 0.0) && (p_in_v1_v2 > 0.0);\n  }\n\n  bool point_in_unit_square(vec2 spriteCoord) {\n    return true;\n  }\n";
+	var VERTEX_SHADER = "\n  // Index of the specific vertex (passed in as bufferAttribute), and the\n  // variable that will be used to pass it to the fragment shader.\n  attribute float spriteIndex;\n  attribute vec3 color;\n  attribute float scaleFactor;\n\n  varying vec2 xyIndex;\n  varying vec3 vColor;\n\n  uniform bool sizeAttenuation;\n  uniform float pointSize;\n  uniform float spritesPerRow;\n  uniform float spritesPerColumn;\n\n  void main() {\n    // Pass index and color values to fragment shader.\n    vColor = color;\n    xyIndex = vec2(mod(spriteIndex, spritesPerRow),\n              floor(spriteIndex / spritesPerColumn));\n\n    // Transform current vertex by modelViewMatrix (model world position and\n    // camera world position matrix).\n    vec4 cameraSpacePos = modelViewMatrix * vec4(position, 1.0);\n\n    // Project vertex in camera-space to screen coordinates using the camera's\n    // projection matrix.\n    gl_Position = projectionMatrix * cameraSpacePos;\n\n    // Create size attenuation (if we're in 3D mode) by making the size of\n    // each point inversly proportional to its distance to the camera.\n    float outputPointSize = pointSize;\n    if (sizeAttenuation) {\n      outputPointSize = -pointSize / cameraSpacePos.z;\n    }\n\n    gl_PointSize =\n      max(outputPointSize * scaleFactor, " + MIN_POINT_SIZE.toFixed(1) + ");\n  }";
+	var FRAGMENT_SHADER = "\n  varying vec2 xyIndex;\n  varying vec3 vColor;\n\n  uniform sampler2D texture;\n  uniform float spritesPerRow;\n  uniform float spritesPerColumn;\n  uniform bool isImage;\n\n  " + THREE.ShaderChunk['common'] + "\n  " + THREE.ShaderChunk['fog_pars_fragment'] + "\n  " + FRAGMENT_SHADER_POINT_TEST_CHUNK + "\n\n  void main() {\n    if (isImage) {\n      // Coordinates of the vertex within the entire sprite image.\n      vec2 coords =\n        (gl_PointCoord + xyIndex) / vec2(spritesPerRow, spritesPerColumn);\n      gl_FragColor = vec4(vColor, 1.0) * texture2D(texture, coords);\n    } else {\n      bool inside = point_in_unit_circle(gl_PointCoord);\n      if (!inside) {\n        discard;\n      }\n      gl_FragColor = vec4(vColor, 1);\n    }\n    " + THREE.ShaderChunk['fog_fragment'] + "\n  }";
+	var SCALE = 200;
+	var LOG_BASE = 8;
+	var DIVISOR = 1.5;
+	var geometry = null;
+	var points = null;
+	var targets = [];
+	var range = [-width / 2, width / 2];
+	var xScaler;
+	var yScaler;
+	var zScaler;
+
+	//init("train");
+	//animate();
+	
+	function dispose() {
+		if (scene != null) {
+			scene.remove(points);
+			points.geometry.dispose();
+            points = null;
+			geometry = null;
+			hideLabelOption();
+		}
+	}
+	function init(dataSet) {
+		dispose();
+		var spritesPromise = fetchImage("http://localhost:5000/css/sprite_" + dataSet + ".png");
+		var tensorPromise = fetchTensorFile("http://localhost:5000/data/mnist_" + dataSet + "_points.csv");
+		Promise.all([spritesPromise, tensorPromise]).then(function (values) {
+			spriteImage = values[0];
+			spritesPerRow = spriteImage.width / 32;
+			spritesPerColumn = spriteImage.height / 32;
+			renderMaterial = createRenderMaterial();
+			//renderMaterial.uniforms.fogColor.value = this.scene.fog.color;
+			//renderMaterial.uniforms.fogNear.value = this.fog.near;
+			//renderMaterial.uniforms.fogFar.value = this.fog.far;
+			var myTexture = new THREE.Texture(spriteImage);
+			myTexture.minFilter = THREE.LinearFilter;
+			myTexture.generateMipmaps = false;
+			myTexture.flipY = false;
+			//myTexture.magFilter = THREE.NearestFilter;
+			myTexture.needsUpdate = true;
+
+			renderMaterial.uniforms.spritesPerRow.value = spritesPerRow;
+			renderMaterial.uniforms.spritesPerColumn.value = spritesPerColumn;
+			renderMaterial.uniforms.isImage.value = true;
+			renderMaterial.uniforms.texture.value = myTexture;
+			renderMaterial.uniforms.sizeAttenuation.value = false;
+			
+			var svmParam = GLOBALS.state.kernel + ":" + GLOBALS.state.gamma + ":" + GLOBALS.state.penalty + ":" + GLOBALS.state.degree
+			if (GLOBALS.dataPoints[dataSet] !== null) {
+				dataPoints = GLOBALS.dataPoints[dataSet];	
+				if (GLOBALS.predict[dataSet] !== null && GLOBALS.predict[dataSet][svmParam] !== undefined) {				
+					d3.select("#floatingCirclesG").style("display", "none");
+					d3.select("#charts").style("display", "block");
+					var jsonObject = GLOBALS.predict[dataSet][svmParam];
+					var classResult = jsonObject["result"];
+					classResult.forEach(function (d, i) {
+						dataPoints[i].coords[4] = classResult[i];
+					});
+					precisionScoreData = jsonObject["precision_score"];
+					recallScoreData = jsonObject["recall_score"];
+					f1ScoreData = jsonObject["f1_score"];
+					confusionData = constructConfusionData(jsonObject["confusion"]);
+					curveData = constructPrecisionRecallCurveData(jsonObject["precision_curve"], jsonObject["recall_curve"])
+					refreshChart();
+					showChart(0);
+					showLabelOption();
+					curveChart.series.forEach(function(d, i) {	
+						d.show();
+					});
+				} else {
+					dataPoints.forEach(function (d, i) {
+						d.coords[4] = -1;
+					});
+					d3.select("#charts").style("display", "none");
+				}
+			} else {
+				var content = values[1];
+				parseTensorFile(content);
+				GLOBALS.dataPoints[dataSet] = dataPoints;
+				d3.select("#charts").style("display", "none");
+			}
+			generateRender(dataSet);
+			//transform(1000);
+			animate();
+		},  function(error) {
+			console.log(error);
+		});
+				
+
+		/*var tensorFile = "http://localhost:5000/data/mnist_" + dataSet + "_points.csv";
+		var xhr = new XMLHttpRequest();
+		xhr.open("GET", tensorFile, false);
+		xhr.send(null);
+		
+		if (xhr.status === 200) {
+			dataPoints = [];
+			var content = xhr.responseText;
+			var pointLine = content.split("\n");
+			for (var j = 0; j < pointLine.length; j++ ){
+				if (pointLine[j] !== "") {
+					var p = pointLine[j].split(",", 4);
+					dataPoints.push(new Point([Number(p[0]),Number(p[1]),Number(p[2]), Number(p[3]), -1], "rgb(128,128,128)"));
+				}
+			}
+			generateRender(dataSet);
+		}*/
+	}
+	
+	function generateRender(dataSet) {
+		container = document.getElementById( 'playground-canvas' );
+		if (renderer !== undefined) {
+			container.removeChild(renderer.domElement);
+		}
+		camera = new THREE.PerspectiveCamera( 75, 1, 1, width );
+		camera.position.z = width / 2 ;
+		scene = new THREE.Scene();
+		scene.background = new THREE.Color( 0xffffff );
+		scene.fog = new THREE.FogExp2( 0xFFFFFF, 0.0008 );
+		
+		//var textureLoader = new THREE.TextureLoader();
+		//var origTexture = new THREE.Texture( spriteImage); //new THREE.ImageUtils.loadTexture("data/sprite_" + dataSet + ".png" );
+		var xExtent = d3.extent(dataPoints, function (p, i) { return p.coords[0]; });
+        var yExtent = d3.extent(dataPoints, function (p, i) { return p.coords[1]; });
+		var zExtent = d3.extent(dataPoints, function (p, i) { return p.coords[2]; });
+		xScaler = d3.scaleLinear();
+        yScaler = d3.scaleLinear();
+        zScaler = d3.scaleLinear();
+        xScaler.domain(xExtent).range(range);
+        yScaler.domain(yExtent).range(range);
+		zScaler.domain(zExtent).range(range);
+		renderMaterial.uniforms.pointSize.value = 20;//SCALE / Math.log(dataPoints.length) / Math.log(LOG_BASE);;
+		renderMaterial.needsUpdate = true;
+		var positions = new Float32Array(dataPoints.length * 3);
+		var dst = 0;
+		dataPoints.forEach(function (d, i) {
+			positions[dst++] = 
+				xScaler(dataPoints[i].coords[0]);
+			positions[dst++] = 
+				yScaler(dataPoints[i].coords[1]);
+			positions[dst++] = 
+				zScaler(dataPoints[i].coords[2]);
+		});
+		var spriteIndices = new Float32Array(dataPoints.length);
+		var scales = new Float32Array(dataPoints.length);
+		dst = 0;
+		dataPoints.forEach(function (d, i) {
+			spriteIndices[dst] = i;
+			scales[dst++] = 1.2;
+        });
+		var colors = new Float32Array(dataPoints.length * 3);
+		dst = 0;
+		dataPoints.forEach(function (d, i) {
+			var c = new THREE.Color(findColor(dataPoints[i].coords[4]));
+			colors[dst++] = c.r;
+			colors[dst++] = c.g;
+			colors[dst++] = c.b;
+        });
+		
+		geometry = createGeometry();
+		var spriteIndexBufferAttribute = new THREE.BufferAttribute(spriteIndices, 1);
+		geometry.addAttribute('spriteIndex', spriteIndexBufferAttribute);
+		geometry.addAttribute('position', new THREE.BufferAttribute(positions, 3));
+		geometry.addAttribute('color', new THREE.BufferAttribute(colors, 3));
+		geometry.addAttribute('scaleFactor', new THREE.BufferAttribute(scales, 1));
+		geometry.needsUpdate = true;
+		points = new THREE.Points(geometry, renderMaterial);
+		points.frustumCulled = false;
+		scene.add( points );
+        //geometry.addAttribute('scaleFactor', new THREE.BufferAttribute(null, 1));
+		//for ( i = 0; i < 1000 /*dataPoints.length*/; i ++ ) {
+			/*var texture = origTexture.clone();
+			var rowNum = Math.floor(i / spritesPerRow);
+			var columnNum = i % spritesPerRow;
+			var offset = new THREE.Vector2();
+			offset.x = columnNum / spritesPerRow;
+			offset.y = (spritesPerColumn - rowNum - 1 ) / spritesPerColumn;
+			var scale = new THREE.Vector2();
+			scale.x = 1 / spritesPerColumn;
+			scale.y = 1 / spritesPerRow;
+			texture.offset = offset;
+			texture.repeat = scale;
+			texture.needsUpdate = true;
+			var material = new THREE.SpriteMaterial( {map: texture} ); //, useScreenCoordinates: false, transparent: true } );
+			var mesh = new THREE.Sprite(material);
+			mesh.position.set(xScaler(dataPoints[i].coords[0]), yScaler(dataPoints[i].coords[1]), zScaler(dataPoints[i].coords[2]));
+			mesh.scale.set(32, 32, 1);
+			scene.add( mesh );*/
+			
+			/*var spriteTexture = texture;
+			//mySpriteTexture.needsUpdate = true;
+			// Used if the texture isn't a power of 2.
+			//mySpriteTexture.minFilter = THREE.LinearFilter;
+			//mySpriteTexture.generateMipmaps = false;
+			//mySpriteTexture.flipY = false;
+			var rowNum = Math.floor(i / spritesPerRow);
+			var columnNum = i % spritesPerRow;
+			var xOffset = columnNum / spritesPerRow;
+			var yOffset = (spritesPerColumn - rowNum - 1 ) / spritesPerColumn;
+			//var xRepeat = xOffset;
+			//var yRepeat = yOffset + 1 / spritesPerRow;
+			spriteTexture.wrapS = spriteTexture.wrapT = THREE.RepeatWrapping; 
+			spriteTexture.offset.x = xOffset;
+			spriteTexture.offset.y = yOffset;
+			spriteTexture.repeat.set( 1 / spritesPerColumn,  1 / spritesPerRow );
+			spriteTexture.needsUpdate = true;
+			geometry = new THREE.Geometry();
+			geometry.name = dataPoints[i].coords[3];
+			var vertex = new THREE.Vector3();
+			vertex.x = xScaler(dataPoints[i].coords[0]);
+			vertex.y = yScaler(dataPoints[i].coords[1]);
+			vertex.z = zScaler(dataPoints[i].coords[2]);
+			geometry.vertices.push( vertex );
+			//size = 10;
+			//var sprite = textureLoader.load( "css/" + dataSet + "/img" + i + ".png" );
+			materials[i] = new THREE.PointsMaterial( { size: 10, map: spriteTexture, blending: THREE.MultiplyBlending, depthTest: true, transparent : false } );
+			var color = findColor(dataPoints[i].coords[4]);
+			materials[i].color = new THREE.Color(color);
+			particles = new THREE.Points( geometry, materials[i] );
+			//particles = new THREE.Points( geometry, renderMaterial );
+			scene.add( particles );
+
+			//var spritem = new THREE.SpriteMaterial({ map : mySpriteTexture});//, useScreenCoordinates: false, affectedByDistance: true });
+			//var sprite = new THREE.Sprite( spritem );
+			
+			//var mySpriteTexture = THREE.ImageUtils.loadTexture("myTextures.png");
+			
+			//spritem.uvOffset.x = (rowNum == 0) ? 0 : (rowNum - 1) * 28;
+			//spritem.uvOffset.y = (columnNum == 0) ? 0 : (columnNum - 1) * 28;
+			//spritem.uvScale.x = 28;
+			//spritem.uvScale.y = 28;
+			//sprite.position.set(xScaler(dataPoints[i].coords[0]), yScaler(dataPoints[i].coords[1]), zScaler(dataPoints[i].coords[2]));
+			//sprite.scale.set(45,45,1);
+			//scene.add( sprite );*/
+		//}
+		
+		renderer = new THREE.WebGLRenderer();
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.setSize( width, height );
+		container.appendChild( renderer.domElement );
+	}
+	
+	function createGeometry() {
+        var geometry = new THREE.BufferGeometry();
+        //geometry.addAttribute('position', new THREE.BufferAttribute(null, 3));
+        //geometry.addAttribute('color', new THREE.BufferAttribute(null, 3));
+        //geometry.addAttribute('scaleFactor', new THREE.BufferAttribute(null, 1));
+        return geometry;
+    }
+	
+	function createRenderMaterial() {
+        var uniforms = {
+            texture: { type: 't' },
+            spritesPerRow: { type: 'f' },
+            spritesPerColumn: { type: 'f' },
+            fogColor: { type: 'c' },
+            fogNear: { type: 'f' },
+            fogFar: { type: 'f' },
+            isImage: { type: 'bool' },
+            sizeAttenuation: { type: 'bool' },
+            pointSize: { type: 'f' }
+        };
+        
+        return new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: VERTEX_SHADER,
+            fragmentShader: FRAGMENT_SHADER,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            fog: false,
+            blending: THREE.MultiplyBlending
+        });
+    };
+	
+	function fetchTensorFile(url) {
+		return new Promise(function (resolve, reject) {
+            d3.text(url, function (err, rawdata) {
+                if (err) {
+                    console.log(err.responseText, 'fetching tensorfile');
+                    reject(err);
+                    return;
+                }
+                resolve(rawdata);
+            });
+        });
+	}
+	
+	function parseTensorFile(content) {
+		dataPoints = [];
+		var pointLine = content.split("\n");
+		for (var j = 0; j < pointLine.length; j++ ){
+			if (pointLine[j] !== "") {
+				var p = pointLine[j].split(",", 4);
+				dataPoints.push(new Point([Number(p[0]),Number(p[1]),Number(p[2]), Number(p[3]), -1], "rgb(128,128,128)"));
+			}
+		}
+	}
+	
+	function fetchImage(url) {
+		return new Promise(function (resolve, reject) {
+			var image = new Image();
+			image.onload = function () { return resolve(image); };
+			image.onerror = function (err) { return reject(err); };
+			image.crossOrigin = '';
+			image.src = url;
+		});
+	}
+	
+	function findColor(label) {
+		var colorName = 'rgb(200,200,200)';
+		switch(Math.round(label,0)) {
+			case 0:
+				colorName = 'rgb(255,188,100)';
+				break;
+			case 1:
+				colorName = 'rgb(255,255,0)';
+				break;
+			case 2: 
+				colorName = 'rgb(255,228,196)';
+				break;		
+			case 3:
+				colorName = 'rgb(32,178,170)';
+				break;		
+			case 4:
+				colorName = 'rgb(127,255,212)';
+				break;
+			case 5:
+				colorName = 'rgb(255,127,0)';
+				break;
+			case 6:
+				colorName = 'rgb(255,0,255)';
+				break;
+			case 7:
+				colorName = 'rgb(0,255,255)';
+				break;
+			case 8:
+				colorName = 'rgb(0,255,0)';
+				break;
+			case 9:
+				colorName = 'rgb(143,188,143)';
+				break;
+			default:
+				break;
+		}
+		return colorName;
+	}
+	
+	function onWindowResize() {
+		windowHalfX = window.innerWidth / 2;
+		windowHalfY = window.innerHeight / 2;
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		renderer.setSize( window.innerWidth, window.innerHeight );
+	}
+	
+	function onDocumentMouseMove( event ) {
+		mouseX = event.clientX - windowHalfX;
+		mouseY = event.clientY - windowHalfY;
+	}
+	
+	function onDocumentTouchStart( event ) {
+		if ( event.touches.length === 1 ) {
+			event.preventDefault();
+			mouseX = event.touches[ 0 ].pageX - windowHalfX;
+			mouseY = event.touches[ 0 ].pageY - windowHalfY;
+		}
+	}
+	
+	function onDocumentTouchMove( event ) {
+		if ( event.touches.length === 1 ) {
+			event.preventDefault();
+			mouseX = event.touches[ 0 ].pageX - windowHalfX;
+			mouseY = event.touches[ 0 ].pageY - windowHalfY;
+		}
+	}
+	
+	function onDataSetChange( event ) {
+		init(GLOBALS.state.dataSet);
+		//animate();
+	}
+	
+	function onClassChange() {
+		var svmParam = GLOBALS.state.kernel + ":" + GLOBALS.state.gamma + ":" + GLOBALS.state.penalty + ":" + GLOBALS.state.degree
+		var classResult = GLOBALS.predict[GLOBALS.state.dataSet][svmParam]["result"];
+		//var textureLoader = new THREE.TextureLoader();
+		//var size = 10;
+		/*for ( i = 0; i < scene.children.length; i ++ ) {
+			var object = scene.children[ i ];
+			if ( object instanceof THREE.Points) {
+				//object.rotation.y = time * ( i < 4 ? i + 1 : - ( i + 1 ) );
+				//object.rotation.y += 0.01;
+				//object.rotation.x += 0.005;
+				if (Math.round(classResult[i],0) !== Math.round(object.geometry.name,0)) {
+					console.log("point " + i + " should be: " + object.geometry.name + ", but classified as " + classResult[i]);
+				}
+				//var sprite = textureLoader.load( "css/" + GLOBALS.state.dataSet + "/img" + i + ".png" );
+				//var material = new THREE.PointsMaterial( { size: size, map: sprite, blending: THREE.MultiplyBlending, depthTest: true, transparent : false } );
+				var color = findColor(classResult[i]);
+				material.color = new THREE.Color(color);
+				object.material = material
+			}
+		}*/
+		var col = new Float32Array(classResult.length * 3);
+		var dst = 0;
+		classResult.forEach(function (d, i) {
+			dataPoints[i].coords[4] = classResult[i];
+			var c = new THREE.Color(findColor(classResult[i]));
+			col[dst++] = c.r;
+			col[dst++] = c.g;
+			col[dst++] = c.b;
+        });
+		var colors = geometry.getAttribute('color');
+        colors.array = col;
+        colors.needsUpdate = true;
+		showLabelOption();
+	}
+	
+	function showLabelOption() {
+		var data = [{value: "",		label: "All"},
+					{value: "0", 	label: "Class 0"}, 
+					{value: "1", 	label: "Class 1"}, 
+					{value: "2", 	label: "Class 2"}, 
+					{value: "3", 	label: "Class 3"},
+					{value: "4",	label: "Class 4"},
+					{value: "5", 	label: "Class 5"}, 
+					{value: "6", 	label: "Class 6"}, 
+					{value: "7", 	label: "Class 7"}, 
+					{value: "8", 	label: "Class 8"},
+					{value: "9",	label: "Class 9"}
+					];
+		var labelOption = d3.select('#label-options').style("display", "block");
+		labelOption.selectAll("label").remove();
+		labelOption.selectAll("select").remove();
+		labelOption.append("label").text('Label').style("padding-right: 10px");
+		var selector = labelOption.append("select")
+						.attr("name", "label");
+		selector.selectAll('option').data(data).enter().append('option').text(function (d) { return d.label; }).property("value", function (d) { return d.value;});
+		selector.on("change", function onchange() {
+			console.log(this.selectedOptions[0].value);
+			onLabelFilter(this.selectedOptions[0].value);
+		});
+	}
+	
+	function hideLabelOption() {
+		var labelOption = d3.select('#label-options').style("display", "none");
+		labelOption.selectAll("label").remove();
+		labelOption.selectAll("select").remove();
+	}
+	
+	function onLabelFilter(label) {
+		var indices = [];
+		var dst = 0;
+		dataPoints.forEach(function (d, i) {
+			if (label== '' || d.coords[3] == label) {
+				indices.push(i);
+			}
+        });
+		var filterSpriteIndices = new Float32Array(indices.length);
+		var positions = new Float32Array(indices.length * 3);
+		var col = new Float32Array(indices.length * 3);
+		var scales = new Float32Array(indices.length);
+		indices.forEach(function(d, i) {
+			filterSpriteIndices[i] = indices[i];
+			scales[i] = 1.2;
+			var dataPoint = dataPoints[indices[i]];
+			var c = new THREE.Color(findColor(dataPoint.coords[4]));
+			col[dst] = c.r;
+			positions[dst++] = 
+				xScaler(dataPoint.coords[0]);
+			col[dst] = c.g;
+			positions[dst++] = 
+				yScaler(dataPoint.coords[1]);
+			col[dst] = c.b;
+			positions[dst++] = 
+				zScaler(dataPoint.coords[2]);
+		});
+		/*var spriteIndex = geometry.getAttribute('spriteIndex');
+		spriteIndex.array = indices;
+		spriteIndex.count = indices.length;
+		spriteIndex.needsUpdate = true;
+		var colors = geometry.getAttribute('color');
+        colors.array = col;
+		colors.count = col.length;
+        colors.needsUpdate = true;
+		var pos = geometry.getAttribute('position');
+		pos.array = positions;
+		pos.count = positions.length;
+		pos.needsUpdate = true;
+		var sc = geometry.getAttribute('scaleFactor');
+		sc.array = scales;
+		sc.count = scales.length;
+		sc.needsUpdate = true;*/
+		/*geometry.removeAttribute('spriteIndex');
+		geometry.removeAttribute('position');
+		geometry.removeAttribute('color');
+		geometry.removeAttribute('scaleFactor');*/
+		geometry.addAttribute('spriteIndex', new THREE.BufferAttribute(filterSpriteIndices, 1));
+		geometry.addAttribute('position', new THREE.BufferAttribute(positions, 3));
+		geometry.addAttribute('color', new THREE.BufferAttribute(col, 3));
+		geometry.addAttribute('scaleFactor', new THREE.BufferAttribute(scales, 1));
+		//curveChart.redraw();
+		curveChart.series.forEach(function(d, i) {
+			if (label == '' || d.name == 'Class ' + label) {
+				d.show();
+			} else {
+				d.hide();
+			}
+		});
+	}
+	
+	function animate() {
+		requestAnimationFrame( animate );
+		//TWEEN.update();
+		render();
+		//stats.update();
+	}
+	
+	function render() {
+		if (camera != null && scene != null) {
+			var time = Date.now() * 0.00005;
+
+			camera.position.x += ( mouseX - camera.position.x ) * 0.05;
+			camera.position.y += ( - mouseY - camera.position.y ) * 0.05;
+			camera.lookAt( scene.position );
+			for ( i = 0; i < scene.children.length; i ++ ) {
+				var object = scene.children[ i ];
+				if ( object instanceof THREE.Points ) {
+					//object.rotation.y = time * ( i < 4 ? i + 1 : - ( i + 1 ) );
+					object.rotation.y += 0.003;
+					object.rotation.x += 0.005;
+				}
+			}
+			/*for ( i = 0; i < materials.length; i ++ ) {
+				color = parameters[i][0];
+				h = ( 360 * ( color[0] + time ) % 360 ) / 360;
+				materials[i].color.setHSL( h, color[1], color[2] );
+			}*/
+			renderer.render( scene, camera );
+		}
+	}
+		
+	function transform( duration ) {
+		TWEEN.removeAll();
+		new TWEEN.Tween( camera.fov )
+			.to( 75, Math.random() * duration + duration )
+			.easing( TWEEN.Easing.Exponential.InOut )
+			.start();
+		camera.updateProjectionMatrix();
+	
+		new TWEEN.Tween( this )
+			.to( {}, duration * 2 )
+			.onUpdate( render )
+			.start();
+	    
+	}
+
 	var scoreChartOptions = {
 		chart: {
 			type: 'bar',
@@ -712,48 +1321,58 @@ input[type=range]:focus::-ms-fill-upper {
 		},
 		series: [{
 			name: 'Class 0',
+			color: 'rgb(255,188,100)',
 		}, {
 			name: 'Class 1',
+			color: 'rgb(255,255,0)',
 		}, {
 			name: 'Class 2',
+			color: 'rgb(255,228,196)',
 		}, {
 			name: 'Class 3',
+			color: 'rgb(32,178,170)',
 		}, {
 			name: 'Class 4',
+			color: 'rgb(127,255,212)',
 		}, {
 			name: 'Class 5',
+			color: 'rgb(255,127,0)',
 		}, {
 			name: 'Class 6',
+			color: 'rgb(255,0,255)',
 		}, {
 			name: 'Class 7',
+			color: 'rgb(0,255,255)',
 		}, {
 			name: 'Class 8',
+			color: 'rgb(0,255,0)',
 		}, {
-			name: 'Class 9',	
+			name: 'Class 9',
+			color: 'rgb(143,188,143)',
 		}]
 	};
 
 	function refreshChart() {
-		if (scoreChart !== null) {
-			scoreChart.destroy();
-		}        
-	    scoreChartOptions.series[0].data = precisionScoreData;
-	    scoreChartOptions.series[1].data = recallScoreData;
-	    scoreChartOptions.series[2].data = f1ScoreData;
-		scoreChart = new Highcharts.Chart('container1', scoreChartOptions);
-		
-		if (confusionChart != null) {
-			confusionChart.destroy();
-		}
-		confusionChartOptions.series[0].data = confusionData;
-		confusionChart = new Highcharts.chart('container2', confusionChartOptions);
 		if (curveChart != null) {
 			curveChart.destroy();
 		}
 		for (var i = 0; i < curveChartOptions.series.length; i ++) {
 			curveChartOptions.series[i].data = curveData[i];
 		}
-		curveChart = new Highcharts.Chart('container3', curveChartOptions);
+		curveChart = new Highcharts.Chart('container1', curveChartOptions);
+		if (scoreChart !== null) {
+			scoreChart.destroy();
+		}        
+	    scoreChartOptions.series[0].data = precisionScoreData;
+	    scoreChartOptions.series[1].data = recallScoreData;
+	    scoreChartOptions.series[2].data = f1ScoreData;
+		scoreChart = new Highcharts.Chart('container2', scoreChartOptions);
+		
+		if (confusionChart != null) {
+			confusionChart.destroy();
+		}
+		confusionChartOptions.series[0].data = confusionData;
+		confusionChart = new Highcharts.chart('container3', confusionChartOptions);
     }
 	
 	function constructConfusionData(origData) {
@@ -782,54 +1401,88 @@ input[type=range]:focus::-ms-fill-upper {
 		d3.select("#floatingCirclesG").style("display", "block");
 		d3.select("#charts").style("display", "none");
 		GLOBALS.updateParameters();
-		var url;
-		if (GLOBALS.state.dataSet === "train") {
-			url = "http://localhost:5000/runsvm/train";
-		} else {
-			url = "http://localhost:5000/runsvm/test";
-		}
-		params = JSON.stringify({"kernel": GLOBALS.state.kernel, "gamma": "auto", "penalty": Number(GLOBALS.state.penalty), "degree": Number(GLOBALS.state.degree)});
-		var http = new XMLHttpRequest();
-		http.open("POST", url, true);
-		
-		http.setRequestHeader("Content-type", "application/json; charset=utf-8");
-		//http.setRequestHeader("Content-length", params.length);
-		//http.setRequestHeader("Connection", "close");
-
-		http.onreadystatechange = function() {
+		var svmParam = GLOBALS.state.kernel + ":" + GLOBALS.state.gamma + ":" + GLOBALS.state.penalty + ":" + GLOBALS.state.degree
+		if (GLOBALS.predict[GLOBALS.state.dataSet] !== null && GLOBALS.predict[GLOBALS.state.dataSet][svmParam] !== undefined) {
 			d3.select("#floatingCirclesG").style("display", "none");
 			d3.select("#charts").style("display", "block");
-			var jsonText = http.responseText;
-			var jsonObject = JSON.parse(jsonText);
-			GLOBALS.predict[GLOBALS.state.dataSet] = jsonObject["result"];
+			var jsonObject = GLOBALS.predict[GLOBALS.state.dataSet][svmParam];
 			precisionScoreData = jsonObject["precision_score"];
 			recallScoreData = jsonObject["recall_score"];
 			f1ScoreData = jsonObject["f1_score"];
 			confusionData = constructConfusionData(jsonObject["confusion"]);
 			curveData = constructPrecisionRecallCurveData(jsonObject["precision_curve"], jsonObject["recall_curve"])
-			GLOBALS.runState();
+			//GLOBALS.runState();
+			//onClassChange();
 			refreshChart();
 			showChart(0);
-			console.log("receive response: " + jsonText.substr(0,100))
+			curveChart.series.forEach(function(d, i) {	
+				d.show();
+			});
+			var event = new CustomEvent(
+				"classChange", 
+				{
+					bubbles: true,
+					cancelable: true
+				}
+			);
+			document.getElementById('playground-canvas').dispatchEvent(event);
+		} else {
+			var url;
+			if (GLOBALS.state.dataSet === "train") {
+				url = "http://localhost:5000/runsvm/train";
+			} else {
+				url = "http://localhost:5000/runsvm/test";
+			}
+			params = JSON.stringify({"kernel": GLOBALS.state.kernel, "gamma": "auto", "penalty": Number(GLOBALS.state.penalty), "degree": Number(GLOBALS.state.degree)});
+			var http = new XMLHttpRequest();
+			http.open("POST", url, true);
+			
+			http.setRequestHeader("Content-type", "application/json; charset=utf-8");
+			//http.setRequestHeader("Content-length", params.length);
+			//http.setRequestHeader("Connection", "close");
+
+			http.onreadystatechange = function() {
+				d3.select("#floatingCirclesG").style("display", "none");
+				d3.select("#charts").style("display", "block");
+				var jsonText = http.responseText;
+				var jsonObject = JSON.parse(jsonText);
+				if (GLOBALS.predict[GLOBALS.state.dataSet] === null) {
+					GLOBALS.predict[GLOBALS.state.dataSet] = {};
+				}
+				GLOBALS.predict[GLOBALS.state.dataSet][svmParam] = jsonObject;
+				precisionScoreData = jsonObject["precision_score"];
+				recallScoreData = jsonObject["recall_score"];
+				f1ScoreData = jsonObject["f1_score"];
+				confusionData = constructConfusionData(jsonObject["confusion"]);
+				curveData = constructPrecisionRecallCurveData(jsonObject["precision_curve"], jsonObject["recall_curve"])
+				//GLOBALS.runState();
+				//onClassChange();
+				refreshChart();
+				showChart(0);
+				console.log("receive response: " + jsonText.substr(0,100))
+				var event = new CustomEvent(
+					"classChange", 
+					{
+						bubbles: true,
+						cancelable: true
+					}
+				);
+				document.getElementById('playground-canvas').dispatchEvent(event);
+			}
+			http.send(params);
 		}
-		http.send(params);
 	}
+	
 	document.getElementById('restart').onclick = runSVM;
+	document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+	document.addEventListener( 'touchstart', onDocumentTouchStart, false );
+	document.addEventListener( 'touchmove', onDocumentTouchMove, false );
+	document.addEventListener( 'dataSetChange', onDataSetChange, false);
+	document.addEventListener( 'classChange', onClassChange, false);
+	//window.addEventListener( 'resize', onWindowResize, false );
 })()
 </script>
 
 </dt-article>
 
-<script type="text/bibliography">
-@article{maaten2008visualizing,
-  title={Visualizing data using t-SNE},
-  author={Maaten, Laurens van der and Hinton, Geoffrey},
-  journal={Journal of Machine Learning Research},
-  volume={9},
-  number={Nov},
-  pages={2579--2605},
-  year={2008},
-  url={http://www.jmlr.org/papers/volume9/vandermaaten08a/vandermaaten08a.pdf}
-}
-</script>
 </body></html>

@@ -26,8 +26,8 @@ function getPoints(demo, params) {
   var points = demo.generator.apply(null, params);
   return points;
 }
-function renderDemoInitial(demo, params, canvas) {
-  visualize(points, canvas, null, null)
+function renderDemoInitial(demo, params, canvas, canvasD3) {
+  visualize(points, canvas, canvasD3, null, null)
 }
 
 
@@ -40,9 +40,9 @@ var timescale = d3.scaleLinear()
   .domain([0, 20, 50, 100, 200, 6000])
   .range([60, 30, 20, 10, 0]);
 
-function demoMaker(points, canvas, options) {
+function demoMaker(points, canvas, canvasD3, options) {
   var demo = {};
-  visualize(points, canvas, "", true, false);
+  visualize(points, canvas, canvasD3, "", true, false);
   return demo;
 }
 	/*, stepCb) {
@@ -105,7 +105,7 @@ function demoMaker(points, canvas, options) {
   return demo;
 }*/
 
-function runDemoSync(points, canvas, options, stepLimit, no3d) {
+function runDemoSync(points, canvas, canvasD3, options, stepLimit, no3d) {
   var tsne = new tsnejs.tSNE(options);
   var dists = distanceMatrix(points);
   tsne.initDataDist(dists);
@@ -118,7 +118,7 @@ function runDemoSync(points, canvas, options, stepLimit, no3d) {
   var solution = tsne.getSolution().map(function(coords, i) {
     return new Point(coords, points[i].color);
   });
-  visualize(solution, canvas, "", no3d); //removed message
+  visualize(solution, canvas, canvasD3, "", no3d); //removed message
   return step;
 }
 

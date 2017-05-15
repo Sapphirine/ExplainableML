@@ -25,6 +25,7 @@ var GLOBALS = {
   penaltySlider: null,
   gammaSlider: null,
   degreeSlider: null,
+  labelSelector: null,
 }
 
 main();
@@ -53,10 +54,26 @@ function main() {
 	GLOBALS.predict = {
 	  train: null,
 	  test: null,
-	}
+	};
+	GLOBALS.dataPoints = {
+	  train: null,
+	  test: null,
+	};
   }
   setStateFromParams();
 
+  function triggerEvent() {
+	var dataOptionsArea = document.getElementById('data-options');
+	var event = new CustomEvent(
+		"dataSetChange", 
+		{
+			bubbles: true,
+			cancelable: true
+		}
+	);
+	dataOptionsArea.dispatchEvent(event);
+  }
+  
   // Utility function for creating value sliders.
   function makeSlider(container, name, min, max, start) {
     var dis = d3.select(container).append("div").attr("id", "slider-div-" + name)
@@ -74,6 +91,7 @@ function main() {
       .on("change", updateParameters)
       .on("input", function() {
         value.text(slider.node().value);
+		triggerEvent();
       })
     return slider.node();
   }
@@ -83,8 +101,8 @@ function main() {
 	var dis = d3.select(container)
 	var selector = dis.append("div").style("width", "250px").append("label").text(name + ' ')
 		.append("select")
-		.attr("name", "kernel")
-		.on('change', updateParameters);
+		.attr("name", "kernel");
+		//.on('change', updateParameters);
 
 	var data = [{value: "rbf", 		label: "RBF"}, 
 				{value: "linear", 	label: "Linear"}, 
@@ -98,6 +116,8 @@ function main() {
 	selector.on("change", function onchange() {
 		 console.log(this.selectedOptions[0].value);
 		 updateDegreeSlider(this.selectedOptions[0].value);
+		 updateParameters();
+		 triggerEvent();
 		/*selectValue = d3.select('select').property('value')
 		d3.select('body')
 				.append('p')
@@ -125,8 +145,9 @@ function main() {
       var params = []; //[demo.options[0].start]
       if(demo.options[1]) params.push(demo.options[1].start)
       var points = demo.generator.apply(null, params);
-      var canvas = d3.select(this).node()
-      visualize(points, canvas, null, null, true)
+      var canvas = d3.select(this).node();
+	  var canvasD3 = d3.select(this);
+      visualize(points, canvas, canvasD3, null, null, true)
     });
 
   dataMenus.append("span")
@@ -139,7 +160,7 @@ function main() {
   //var gammaSlider = makeSlider('#svm-options', 'Gamma', 1, 20,
   //    GLOBALS.state.gamma);
   var degreeSlider = makeSlider('#svm-options', 'Degree', 1, 10,
-	  GLOBALS.state.degree);	
+	  GLOBALS.state.degree);
   GLOBALS.penaltySlider = penaltySlider
   //GLOBALS.gammaSlider = gammaSlider
   GLOBALS.degreeSlider = degreeSlider
@@ -225,6 +246,7 @@ function main() {
 	}
 	
     var canvas = document.getElementById('output');
+	var canvasD3 = d3.select('#playground-canvas');
 
     // if there was already a playground demo going, lets destroy it and make a new one
     if(GLOBALS.playgroundDemo) {
@@ -232,7 +254,7 @@ function main() {
       delete GLOBALS.playgroundDemo;
     }
     //runPlayground(points, canvas, GLOBALS.state, function(step) {
-    GLOBALS.playgroundDemo = demoMaker(points, canvas, GLOBALS.state);
+    GLOBALS.playgroundDemo = demoMaker(points, canvas, canvasD3, GLOBALS.state);
 	/*, function(step) {
       d3.select("#step").text(format(step));
       if(step >= GLOBALS.stepLimit && !GLOBALS.unpausedBefore) {
@@ -292,6 +314,7 @@ function main() {
       .classed("selected", true)
 
     updateParameters();
+	triggerEvent();
   }
 
   // run initial demo;

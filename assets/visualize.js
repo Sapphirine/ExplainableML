@@ -7,22 +7,22 @@ function findColor(label) {
 	var colorName = 'rgb(200,200,200)';
 	switch(Math.round(label,0)) {
 		case 0:
-			colorName = 'rgb(255,99,71)'
+			colorName = 'rgb(255,188,100)';
 			break;
 		case 1:
 			colorName = 'rgb(255,255,0)';
 			break;
-		case 2:
-			colorName = 'rgb(238,130,238)';
+		case 2: 
+			colorName = 'rgb(255,228,196)';
 			break;		
 		case 3:
-			colorName = 'rgb(0,255,127)';
+			colorName = 'rgb(32,178,170)';
 			break;		
 		case 4:
-			colorName = 'rgb(255,182,193)';
+			colorName = 'rgb(127,255,212)';
 			break;
 		case 5:
-			colorName = 'rgb(255,165,0)';
+			colorName = 'rgb(255,127,0)';
 			break;
 		case 6:
 			colorName = 'rgb(255,0,255)';
@@ -54,7 +54,7 @@ function circle(g, x, y, r) {
 
 // Visualize the given points with the given message.
 // If "no3d" is set, ignore the 3D cue for size.
-function visualize(points, canvas, message, no3d, useTrueLabel) {
+function visualize(points, canvas, canvasD3, message, no3d, useTrueLabel) {
   var width = canvas.width;
   var height = canvas.height;
   var g = canvas.getContext('2d');
@@ -83,7 +83,7 @@ function visualize(points, canvas, message, no3d, useTrueLabel) {
       return d3.ascending(points[a].coords[2], points[b].coords[2]);
     });
   }
-
+  					  			  
   for (var i = 0; i < n; i++) {
 	var p = is3d ? points[index[i]] : points[i];
 	g.strokeStyle = 'rgba(255,255,255,.5)';
